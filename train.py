@@ -225,3 +225,5 @@ if __name__ == '__main__':
     training_pipeline.playout_delay = 0.01
 
     training_pipeline.run()
+
+    # V1-封板
