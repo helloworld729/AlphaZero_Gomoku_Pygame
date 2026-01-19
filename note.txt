@@ -1,3 +1,4 @@
+# v1
 所以，模型到底是怎么训练的呢？
 训练阶段：
 「模型为 MCTS 提供先验知识（减少无效搜索），MCTS 为模型提供优化目标（提升模型性能）」，双向赋能，共同生成最优策略。
@@ -50,3 +51,6 @@ or push an existing repository from the command line
 git remote add origin https://github.com/helloworld729/AlphaZero_Gomoku_Pygame.git
 git branch -M main
 git push -u origin main
+
+
+# v2
