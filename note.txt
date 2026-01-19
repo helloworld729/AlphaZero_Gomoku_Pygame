@@ -33,3 +33,20 @@ win_ratio 计算的是 win_cnt[1]，也就是玩家1（AlphaZero）的胜率
 通过 start_player=i % 2 交替先后手
 当 i 为偶数时，玩家1（AlphaZero）先手
 当 i 为奇数时，玩家2（Pure MCTS）先手
+
+
+
+
+create a new repository on the command line
+echo "# AlphaZero_Gomoku_Pygame" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/helloworld729/AlphaZero_Gomoku_Pygame.git
+git push -u origin main
+
+or push an existing repository from the command line
+git remote add origin https://github.com/helloworld729/AlphaZero_Gomoku_Pygame.git
+git branch -M main
+git push -u origin main
