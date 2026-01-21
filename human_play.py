@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-human VS AI models
-Input your move in the format: 2,3
-
-@author: Junxiao Song
-"""
 
 from __future__ import print_function
 
@@ -34,11 +28,11 @@ class Human(object):
 def run():
     n = 5
     width, height = 8, 8
-    model_file = 'best_policy_8_8_5.model'
+    model_file = 'current_policy_8_8_5.model'
 
     # PLAYOUT 推演可视化配置（可选，会显著降低 AI 思考速度）
-    VISUALIZE_PLAYOUT = False  # 设为 True 启用每次 playout 的可视化
-    PLAYOUT_DELAY = 0.5  # 每次 playout 可视化后的延迟时间（秒）
+    VISUALIZE_PLAYOUT = True  # 设为 True 启用每次 playout 的可视化
+    PLAYOUT_DELAY = 0.0  # 每次 playout 可视化后的延迟时间（秒）
 
     try:
         board = Board(width=width, height=height, n_in_row=n)

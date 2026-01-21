@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-An implementation of the training pipeline of AlphaZero for Gomoku
-
-@author: Junxiao Song
-"""
 
 from __future__ import print_function
 
@@ -34,11 +29,11 @@ class TrainPipeline():
                            n_in_row=self.n_in_row)
         self.game = Game(self.board)
         # training params
-        self.learn_rate = 2e-3
+        self.learn_rate = 5e-5  # 原始值=2e-3
         self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
         self.temp = 1.0  # the temperature param
-        self.n_playout = 400  # num of simulations for each move， 原始值=400 访问的广度
-        self.c_puct = 5  # 原始值=5,表示探索的系数
+        self.n_playout = 1000  # num of simulations for each move， 原始值=400 访问的广度
+        self.c_puct = 6  # 原始值=5,表示探索的系数
         self.buffer_size = 10000
         self.batch_size = 512  # mini-batch size for training
         self.data_buffer = deque(maxlen=self.buffer_size)
@@ -46,7 +41,7 @@ class TrainPipeline():
         self.epochs = 5  # num of train_steps for each update
         self.kl_targ = 0.02
         self.check_freq = 50  # 多少次进行一次 和纯MCTS的 对局评估
-        self.game_batch_num = 1500  # 原始1500
+        self.game_batch_num = 50000  # 原始1500
         self.best_win_ratio = 0.0
         self.is_shown_pygame = 1  # 是否展示/刷新 pygame界面
         # num of simulations used for the pure mcts, which is used as
@@ -217,7 +212,7 @@ class TrainPipeline():
 
 
 if __name__ == '__main__':
-    training_pipeline = TrainPipeline()
+    training_pipeline = TrainPipeline(init_model='best_policy_8_8_5.model')
 
     # 推演可视化配置（可选，会显著降低训练速度）
     # 注:搜索树的展示有2个粒度，① 推演前后的展示，② 推演过程的展示，这里配置的是后者

@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Junxiao Song
-"""
 
 from __future__ import print_function
 
@@ -434,26 +431,41 @@ class Game(object):
             x, y = self.board.move_to_location(pos)  # h, w
             game_board[y][7-x] = playerNum
 
-        # 计算胜率评估（在棋子位置更新后）
-        if self.policy_value_fn is not None and len(board.states) > 0:
-            try:
-                _, value = self.policy_value_fn(board)
-                # value 是当前玩家（即将落子）的评估值（-1到1）
-                # 由于已经切换到下一个玩家，所以要取反来表示刚落子玩家的胜率
-                current_player = board.get_current_player()
-                last_player = 3 - current_player  # 刚刚落子的玩家（1变2，2变1）
+        # 检查游戏是否结束
+        end, winner = board.game_end()
+        if end:
+            # 游戏结束，将获胜方的胜率设置为100%
+            if winner == 1:
+                self.win_rates['player1'] = 1.0  # 玩家1获胜，胜率100%
+                self.win_rates['player2'] = 0.0
+            elif winner == 2:
+                self.win_rates['player1'] = 0.0
+                self.win_rates['player2'] = 1.0  # 玩家2获胜，胜率100%
+            else:
+                # 平局，双方胜率50%
+                self.win_rates['player1'] = 0.5
+                self.win_rates['player2'] = 0.5
+        else:
+            # 游戏未结束，使用神经网络评估胜率
+            if self.policy_value_fn is not None and len(board.states) > 0:
+                try:
+                    _, value = self.policy_value_fn(board)
+                    # value 是当前玩家（即将落子）的评估值（-1到1）
+                    # 由于已经切换到下一个玩家，所以要取反来表示刚落子玩家的胜率
+                    current_player = board.get_current_player()
+                    last_player = 3 - current_player  # 刚刚落子的玩家（1变2，2变1）
 
-                # value 是当前玩家视角，刚落子玩家的胜率需要取反
-                if last_player == 1:
-                    # 刚落子的是玩家1（黑子）
-                    self.win_rates['player1'] = (-value + 1) / 2  # 取反后转换到0-1
-                    self.win_rates['player2'] = 1 - self.win_rates['player1']
-                else:
-                    # 刚落子的是玩家2（白子）
-                    self.win_rates['player2'] = (-value + 1) / 2
-                    self.win_rates['player1'] = 1 - self.win_rates['player2']
-            except:
-                pass  # 如果评估失败，保持原有胜率
+                    # value 是当前玩家视角，刚落子玩家的胜率需要取反
+                    if last_player == 1:
+                        # 刚落子的是玩家1（黑子）
+                        self.win_rates['player1'] = (-value + 1) / 2  # 取反后转换到0-1
+                        self.win_rates['player2'] = 1 - self.win_rates['player1']
+                    else:
+                        # 刚落子的是玩家2（白子）
+                        self.win_rates['player2'] = (-value + 1) / 2
+                        self.win_rates['player1'] = 1 - self.win_rates['player2']
+                except:
+                    pass  # 如果评估失败，保持原有胜率
 
         # 最后统一更新一次屏幕（包含棋子和胜率）
         self.update_screen(game_board)
