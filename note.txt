@@ -54,3 +54,4 @@ git push -u origin main
 
 
 # v2
+先用2e-3训练1500个epoch，在用5e-5训练1500个epoch

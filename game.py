@@ -961,7 +961,7 @@ class Game(object):
         p1, p2 = self.board.players
         states, mcts_probs, current_players = [], [], []
         while True:
-            # t1: MCTS 搜索（内部会执行推演）
+            # t1: MCTS 搜索（内部会执行推演）  log
             move, move_probs = player.get_action(self.board,
                                                  temp=temp,
                                                  return_prob=1)
