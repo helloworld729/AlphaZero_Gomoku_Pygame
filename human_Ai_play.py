@@ -2,7 +2,7 @@
 
 from __future__ import print_function
 
-from game import Board, Game, MCTSPlayer
+from env.game import Board, Game, MCTSPlayer
 # from policy_value_net import PolicyValueNet  # Theano and Lasagne
 from policy_value_net_pytorch import PolicyValueNet  # Pytorch
 
@@ -28,7 +28,7 @@ class Human(object):
 def run():
     n = 5
     width, height = 8, 8
-    model_file = 'current_policy_8_8_5.model'
+    model_file = 'best_policy_8_8_5_realGood.model'
 
     # PLAYOUT 推演可视化配置（可选，会显著降低 AI 思考速度）
     VISUALIZE_PLAYOUT = True  # 设为 True 启用每次 playout 的可视化

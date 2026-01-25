@@ -7,33 +7,25 @@ from collections import defaultdict, deque
 
 import numpy as np
 
-from game import Board, Game, MCTSPlayer
+from env.game import Game
+from env.MCTSPlayer import MCTSPlayer
+from env.Board import Board
 from mcts_pure import MCTSPlayer as MCTS_Pure
 # from policy_value_net import PolicyValueNet  # Theano and Lasagne
 from policy_value_net_pytorch import PolicyValueNet  # Pytorch
 
-
-# from policy_value_net_tensorflow import PolicyValueNet # Tensorflow
-# from policy_value_net_keras import PolicyValueNet # Keras
-
+IS_VERBOSE = False
 
 class TrainPipeline():
     def __init__(self, init_model=None):
         print("TrainPipeline:init: 初始化: TrainPipeline")
         # params of the board and the game
-        self.board_width = 8
-        self.board_height = 8
-        self.n_in_row = 5
-        self.board = Board(width=self.board_width,
-                           height=self.board_height,
-                           n_in_row=self.n_in_row)
-        self.game = Game(self.board)
         # training params
         self.learn_rate = 5e-5  # 原始值=2e-3
         self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
         self.temp = 1.0  # the temperature param
         self.n_playout = 1000  # num of simulations for each move， 原始值=400 访问的广度
-        self.c_puct = 6  # 原始值=5,表示探索的系数
+        self.c_puct = 5  # 原始值=5,表示探索的系数
         self.buffer_size = 10000
         self.batch_size = 512  # mini-batch size for training
         self.data_buffer = deque(maxlen=self.buffer_size)
@@ -41,14 +33,20 @@ class TrainPipeline():
         self.epochs = 5  # num of train_steps for each update
         self.kl_targ = 0.02
         self.check_freq = 50  # 多少次进行一次 和纯MCTS的 对局评估
-        self.game_batch_num = 50000  # 原始1500
+        self.game_batch_num = 1500  # 训练多少次自我对弈
         self.best_win_ratio = 0.0
         self.is_shown_pygame = 1  # 是否展示/刷新 pygame界面
         # num of simulations used for the pure mcts, which is used as
         # the opponent to evaluate the trained policy
         self.pure_mcts_playout_num = 1000
+
+        # Game相关
+        self.board_width = 8
+        self.board_height = 8
+        self.game = Game(width=self.board_width, height=self.board_height, is_verbose=IS_VERBOSE)
+
         if init_model:
-            # start training from an initial policy-value net
+            # 基于checkPoint继续训练
             self.policy_value_net = PolicyValueNet(self.board_width,
                                                    self.board_height,
                                                    model_file=init_model)
@@ -56,14 +54,7 @@ class TrainPipeline():
             # start training from a new policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
                                                    self.board_height)
-
-        self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
-                                      c_puct=self.c_puct,
-                                      n_playout=self.n_playout,
-                                      is_selfplay=1)
-
-        # 将 mcts_player 传递给 game 对象，用于整合界面显示搜索树
-        self.game.mcts_player = self.mcts_player
+        self.game.mcts_player.mcts.set_policy(self.policy_value_net.policy_value_fn)
 
     # 数据扩充
     def get_equi_data(self, play_data):
@@ -99,8 +90,7 @@ class TrainPipeline():
         """
         for i in range(n_games):
             print("Game:collect_selfplay_data: 开始自我博弈")
-            winner, play_data = self.game.start_self_play(self.mcts_player,
-                                                          is_shown=self.is_shown_pygame,
+            winner, play_data = self.game.start_self_play(is_shown=self.is_shown_pygame,
                                                           temp=self.temp,
                                                           visualize_playout=visualize_playout,
                                                           playout_delay=playout_delay)
@@ -197,12 +187,12 @@ class TrainPipeline():
                 if (i+1) % self.check_freq == 0:
                     print("已经训练: {}轮".format(i+1))
                     win_ratio = self.policy_evaluate()
-                    self.policy_value_net.save_model('./current_policy_8_8_5.model')
+                    self.policy_value_net.save_model('./current_policy_{}_{}_5.model'.format(self.board_width, self.board_width))
                     if win_ratio > self.best_win_ratio:
                         print("相较于MCTS@{}, 截至目前的最佳胜率={} !!!!!!!!".format(self.pure_mcts_playout_num, win_ratio))
                         self.best_win_ratio = win_ratio
                         # update the best_policy
-                        self.policy_value_net.save_model('./best_policy_8_8_5.model')
+                        self.policy_value_net.save_model('./best_policy_{}_{}_5_realGood.model'.format(self.board_width, self.board_width))
                         if (self.best_win_ratio == 1.0 and
                                 self.pure_mcts_playout_num < 5000):
                             self.pure_mcts_playout_num += 1000
@@ -212,7 +202,8 @@ class TrainPipeline():
 
 
 if __name__ == '__main__':
-    training_pipeline = TrainPipeline(init_model='best_policy_8_8_5.model')
+    # training_pipeline = TrainPipeline(init_model='best_policy_8_8_5_realGood.model')
+    training_pipeline = TrainPipeline()
 
     # 推演可视化配置（可选，会显著降低训练速度）
     # 注:搜索树的展示有2个粒度，① 推演前后的展示，② 推演过程的展示，这里配置的是后者

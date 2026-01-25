@@ -128,7 +128,7 @@ class MCTS(object):
         # Evaluate the leaf node by random rollout
         leaf_value = self._evaluate_rollout(state)
         # Update value and visit count of nodes in this traversal.
-        node.update_recursive(-leaf_value)
+        node.update_recursive(-leaf_value)  # 价值回溯，
 
     def _evaluate_rollout(self, state, limit=1000):
         """Use the rollout policy to play until the end of the game,

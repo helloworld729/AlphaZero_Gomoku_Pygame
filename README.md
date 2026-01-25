@@ -51,7 +51,7 @@ pip install pygame torch numpy
 
 #### 人机对战
 ```bash
-python human_play.py
+python human_Ai_play.py
 ```
 
 #### 开始训练
@@ -63,7 +63,7 @@ python train.py
 
 ### 可视化配置
 ```python
-# human_play.py 中的配置
+# human_Ai_play.py 中的配置
 VISUALIZE_PLAYOUT = True   # 启用 playout 可视化
 PLAYOUT_DELAY = 0.5        # 每次推演延迟时间
 IS_VERBOSE = False         # 详细日志输出控制
@@ -81,16 +81,24 @@ IS_VERBOSE = False         # 详细日志输出控制
 
 ```
 AlphaZero_Gomoku_Pygame/
-├── game.py                 # 核心游戏逻辑与 MCTS 实现
-├── human_play.py          # 人机对战入口
-├── train.py               # 训练流程
-├── policy_value_net_pytorch.py  # PyTorch 神经网络模型
-├── ui.py                  # 用户界面组件
+├── game.py                          # 核心游戏逻辑与 MCTS 实现
+├── human_play.py                    # 人机对战入口
+├── train.py                         # 训练流程
+├── policy_value_net_pytorch.py      # PyTorch 神经网络模型
+├── ui.py                            # 用户界面组件
 ├── asset/
-│   ├── game_interface.jpg # 对弈界面截图
-│   └── game_demo.mp4      # 对弈过程演示视频
-├── README.md              # 项目文档
-└── note.txt               # 开发笔记
+│   ├── game_interface.jpg           # 对弈界面截图
+│   └── game_demo.mp4                # 对弈过程演示视频
+├── README.md                        # 项目文档
+├── QUICK_REFERENCE.md               # ⚡ 快速参考卡片（从这里开始！）
+├── CODE_RELATIONSHIP.md             # 代码类关系图
+├── ARCHITECTURE.md                  # 架构概览
+├── TRAINING_FLOW.md                 # Mermaid训练流程图
+├── TRAINING_FLOW_ASCII.md           # ASCII训练流程图
+├── SYSTEM_ARCHITECTURE.md           # 分层系统架构详解
+├── MCTS_NEGAMAX_EXPLANATION.md      # Negamax框架详细解析
+├── NEGAMAX_VISUAL.md                # Negamax可视化对比
+└── note.txt                         # 开发笔记
 ```
 
 ## 🎮 操作说明
@@ -116,12 +124,15 @@ AlphaZero_Gomoku_Pygame/
 - **选择(Selection)**: 基于 UCT 公式选择最优子节点
 - **扩展(Expansion)**: 扩展新的叶子节点
 - **评估(Evaluation)**: 神经网络评估局面价值
-- **回溯(Backpropagation)**: 更新路径上所有节点的统计信息
+- **回溯(Backpropagation)**: 使用 Negamax 框架更新路径上所有节点
 
 ### AlphaZero 集成
 - **策略网络**: 提供先验概率，指导 MCTS 搜索
 - **价值网络**: 评估局面胜率，减少搜索深度
 - **自我对弈**: 生成训练数据，持续优化模型
+
+### Negamax 框架（关键技术）
+在反向传播时使用 `node.update_recursive(-leaf_value)` 实现符号自动转换，确保每个节点都从自己的视角记录价值。详见 [NEGAMAX_VISUAL.md](./NEGAMAX_VISUAL.md)
 
 ## 📊 性能表现
 
@@ -142,9 +153,34 @@ AlphaZero_Gomoku_Pygame/
 3. **棋类 AI**: 五子棋 AI 对战平台
 4. **算法优化**: MCTS 参数调优实验
 
-## 📝 开发笔记
+## 📚 文档导航
 
-详细的技术实现说明和开发心得请参考 [note.txt](./note.txt) 文件。
+### 架构与设计
+- 📊 **[CODE_RELATIONSHIP.md](./CODE_RELATIONSHIP.md)** - 类关系和模块依赖图
+- 🏗️ **[ARCHITECTURE.md](./ARCHITECTURE.md)** - 系统架构概览
+- 📋 **[SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md)** - 分层架构详解（推荐阅读！）
+
+### 训练流程
+- 📈 **[TRAINING_FLOW.md](./TRAINING_FLOW.md)** - Mermaid流程图版本
+- 📉 **[TRAINING_FLOW_ASCII.md](./TRAINING_FLOW_ASCII.md)** - ASCII框图版本（推荐阅读！）
+
+### 核心算法详解
+- 🔄 **[MCTS_NEGAMAX_EXPLANATION.md](./MCTS_NEGAMAX_EXPLANATION.md)** - 为什么反向传播要取负数？（详细解析）
+- 🎯 **[NEGAMAX_VISUAL.md](./NEGAMAX_VISUAL.md)** - Negamax 可视化对比（推荐先读这个！）
+
+### 其他资源
+- 📝 [note.txt](./note.txt) - 开发笔记
+- 📚 [DOCUMENTATION_SUMMARY.md](./DOCUMENTATION_SUMMARY.md) - 文档体系总结和阅读指南
+
+**⚡ 快速入门**：先看 [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) 获得快速答案！
+
+**📚 不知道从何开始？** 查看 [DOCUMENTATION_SUMMARY.md](./DOCUMENTATION_SUMMARY.md) 了解文档体系和推荐阅读路线！
+
+**推荐阅读顺序**：
+1. [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md) - 理解整体架构
+2. [NEGAMAX_VISUAL.md](./NEGAMAX_VISUAL.md) - 理解关键算法
+3. [TRAINING_FLOW_ASCII.md](./TRAINING_FLOW_ASCII.md) - 理解训练过程
+4. [CODE_RELATIONSHIP.md](./CODE_RELATIONSHIP.md) - 查看代码细节
 
 ## 🚀 未来计划
 

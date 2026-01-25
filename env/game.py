@@ -10,6 +10,8 @@ from collections import deque
 import numpy as np
 import pygame
 
+from env.Board import Board
+from env.MCTSPlayer import MCTSPlayer
 # 初始化
 pygame.init()
 pygame.display.set_caption('五子棋')
@@ -18,374 +20,36 @@ pygame.display.set_caption('五子棋')
 IS_VERBOSE = False  # 设为 True 启用详细的 print 输出
 
 
-# ==================== MCTS 相关类 ====================
-
-def softmax(x):
-    probs = np.exp(x - np.max(x))
-    probs /= np.sum(probs)
-    return probs
-
-
-class TreeNode(object):
-    """A node in the MCTS tree."""
-
-    def __init__(self, parent, prior_p, name=None):
-        self._parent = parent
-        self.name = name  # name表示当前节点的一维 坐标值：0-63
-        self._children = {}  # a map from action to TreeNode
-        self._n_visits = 0  # 访问次数
-        self._Q = 0         # exploited  实际价值
-        self._u = 0         # explored   探索价值
-        self._P = prior_p   # 先验概率
-        if name < 0 and IS_VERBOSE:
-            print("TreeNode:init: 初始化节点{}".format(name))
-
-    def expand(self, action_priors):
-        """Expand tree by creating new children."""
-        for action, prob in action_priors:
-            if action not in self._children:
-                self._children[action] = TreeNode(self, prob, action)
-            else:
-                assert False
-        if IS_VERBOSE:
-            print("TreeNode:expand: 扩展了{}个节点".format(len(self._children)))
-
-    def select(self, c_puct):
-        """Select action among children that gives maximum action value Q plus bonus u(P)."""
-        return max(self._children.items(),
-                   key=lambda act_node: act_node[1].get_value(c_puct))
-
-    def update(self, leaf_value):
-        """Update node values from leaf evaluation."""
-        self._n_visits += 1
-        self._Q += 1.0*(leaf_value - self._Q) / self._n_visits
-
-    def update_recursive(self, leaf_value):
-        """Like a call to update(), but applied recursively for all ancestors."""
-        if self._parent:
-            self._parent.update_recursive(-leaf_value)
-        if IS_VERBOSE:
-            print("TreeNode:update_recursive: 价值回溯，当前节点={}, 节点价值(上帝视角)={}".format(self.name, leaf_value))
-        self.update(leaf_value)
-
-    def get_value(self, c_puct):
-        """Calculate and return the value for this node."""
-        # UCT = Q + u，其中 u = c_puct * P * sqrt(parent_visits) / (1 + node_visits)
-        self._u = (c_puct * self._P * np.sqrt(self._parent._n_visits) / (1 + self._n_visits))
-        return self._Q + self._u
-
-    def is_leaf(self):
-        """Check if leaf node."""
-        return self._children == {}
-
-    def is_root(self):
-        return self._parent is None
-
-
-class MCTS(object):
-    """An implementation of Monte Carlo Tree Search."""
-
-    def __init__(self, policy_value_fn, c_puct=5, n_playout=10000, visualize_callback=None, visualize_delay=0.5):
-        if IS_VERBOSE:
-            print("MCTS:init: 初始化 博弈树 MCTS")
-        self._root = TreeNode(None, 1.0, -1)
-        self._policy = policy_value_fn  # 策略网络->计算UCT中的先验概率需要
-        self._c_puct = c_puct        # 常数->计算UCT需要
-        self._n_playout = n_playout  # 推演次数，要执行某个动作前推演的次数
-        self._visualize_callback = visualize_callback  # 可视化回调函数
-        self._visualize_delay = visualize_delay  # 每次可视化后的延迟时间
-
-    def _playout(self, state):
-        # 输入board状态，执行节点推演
-        """Run a single playout from the root to the leaf."""
-        if IS_VERBOSE:
-            print("MCTS:_playout: 开始推演, 此时根结点={}, 是否为叶子节点={}".format(self._root.name, self._root.is_leaf()))
-        node = self._root
-        while(1):
-            if node.is_leaf():
-                if IS_VERBOSE:
-                    print("MCTS:_playout: 已经是叶子节点")
-                break
-            # 选择
-            if IS_VERBOSE:
-                print("MCTS:_playout: 不是叶子节点")
-            action, node = node.select(self._c_puct)
-            if IS_VERBOSE:
-                print("MCTS:_playout: 执行select函数， 选择的action={}".format(action))
-            state.do_move(action)
-        # 评估
-        if IS_VERBOSE:
-            print("MCTS:_playout: 已到达叶子结点{}, 当前选手={}, 执行策略推理(过滤非法节点)".format(node.name, state.get_current_player()))
-        action_probs, leaf_value = self._policy(state)
-        if IS_VERBOSE:
-            print("MCTS:_playout: 在叶子节点执行，当前state的【价值评估】(当前选手视角)=", leaf_value)
-
-        end, winner = state.game_end()
-        if not end:
-            # 扩展
-            if IS_VERBOSE:
-                print("MCTS:_playout: node={}, 对当前叶子节点【执行子节点扩展】".format(node.name))
-            node.expand(action_probs)
-
-            # 扩展后立即可视化（如果启用了回调）
-            if self._visualize_callback:
-                if IS_VERBOSE:
-                    print("MCTS:_playout: 扩展完成，触发可视化刷新")
-                self._visualize_callback()
-                time.sleep(self._visualize_delay)
-        else:
-            if winner == -1:  # tie
-                leaf_value = 0.0
-            else:
-                leaf_value = (1.0 if winner == state.get_current_player() else -1.0)
-                if IS_VERBOSE:
-                    print("MCTS:_playout: 游戏结束, 价值评估矫正为1")
-
-        # 回溯
-        if IS_VERBOSE:
-            print("MCTS:_playout: 开始价值回溯")
-        node.update_recursive(-leaf_value)
-
-    def get_move_probs(self, state, temp=1e-3):
-        # 输入board状态 -> 在根节点执行推演 -> 在根节点计算 动作和概率分布
-        """Run all playouts sequentially and return the available actions and their corresponding probabilities."""
-        if IS_VERBOSE:
-            print("MCTS:get_move_probs: 总共需要执行{}次推演".format(self._n_playout))
-        for n in range(self._n_playout):
-            if IS_VERBOSE:
-                print("#" * 30, " ⬇️虚拟推演{}⬇️ ".format(n + 1), "#" * 30)
-                print("MCTS:get_move_probs: MCTS现在深拷贝棋盘(搜索树唯一)，并开始执行第{}次推演".format(n + 1))
-            state_copy = copy.deepcopy(state)
-            self._playout(state_copy)
-        if IS_VERBOSE:
-            print("MCTS:get_move_probs: 推演完毕！")
-
-        if IS_VERBOSE:
-            print("MCTS:get_move_probs: 获取[(动作, 节点访问次数)]")
-        act_visits = [(act, node._n_visits)
-                      for act, node in self._root._children.items()]
-        acts, visits = zip(*act_visits)
-
-        if IS_VERBOSE:
-            print("MCTS:get_move_probs: 基于访问次数, 计算节点第执行概率")
-        act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
-        if IS_VERBOSE:
-            print("MCTS:get_move_probs: 返回动作与概率")
-        return acts, act_probs
-
-    def set_root(self, last_move):
-        """Step forward in the tree, keeping everything we already know about the subtree."""
-        if last_move in self._root._children:
-            if IS_VERBOSE:
-                print("MCTS:set_root: 搜索树复用, 根节点设置为={},其父节点设置为None".format(last_move))
-            self._root = self._root._children[last_move]
-            self._root._parent = None
-        else:
-            if IS_VERBOSE:
-                print("MCTS:set_root: 搜索树重置")
-            self._root = TreeNode(None, 1.0, -1)
-
-
-class MCTSPlayer(object):
-    """AI player based on MCTS"""
-
-    def __init__(self, policy_value_function, c_puct=5, n_playout=2000, is_selfplay=0,
-                 visualize_callback=None, visualize_delay=0.5):
-        if IS_VERBOSE:
-            print("MCTSPlayer:init: 初始化 博弈树玩家 MCTSPlayer")
-        self.mcts = MCTS(policy_value_function, c_puct, n_playout, visualize_callback, visualize_delay)
-        self._is_selfplay = is_selfplay
-        self.player = None
-
-    def set_player_ind(self, p):
-        self.player = p
-
-    def reset_player(self):
-        self.mcts.set_root(-1)
-
-    def get_action(self, board, temp=1e-3, return_prob=0):
-        """基于游戏局面，结合MCTS搜索，最终输出一个具体的落子动作"""
-        sensible_moves = board.availables
-        if IS_VERBOSE:
-            print("MCTSPlayer:get_action: 有效动作集合大小={}, 明细={}".format(len(sensible_moves), sensible_moves))
-
-        move_probs = np.zeros(board.width*board.height)
-        if len(sensible_moves) > 0:
-            acts, probs = self.mcts.get_move_probs(board, temp)
-            if IS_VERBOSE:
-                print("##############################  ⬆️虚拟推演end⬆️  ##############################")
-
-            move_probs[list(acts)] = probs
-            if IS_VERBOSE:
-                print("MCTSPlayer:get_action: 动作集合", acts)
-                print("MCTSPlayer:get_action: 概率集合(输出3个元素)", move_probs[:3])
-
-            # 选择最优动作
-            if self._is_selfplay:
-                move = acts[np.argmax(probs)]
-                if IS_VERBOSE:
-                    print("MCTSPlayer:get_action: 最终狄拉克采样动作={}".format(move))
-                # 注意：不在这里调用 set_root，而是在外部（game层）调用
-                # 这样可以在显示搜索树后再切换根节点
-            else:
-                move = np.random.choice(acts, p=probs)
-                # 人机对战时重置搜索树
-                self.mcts.set_root(-1)
-
-            if return_prob:
-                return move, move_probs
-            else:
-                return move
-        else:
-            if IS_VERBOSE:
-                print("WARNING: the board is full")
-
-    def __str__(self):
-        return "MCTS {}".format(self.player)
-
-
-# ==================== 棋盘 相关类 ====================
-
-class Board(object):
-    """board for the game"""
-
-    def __init__(self, **kwargs):
-        self.width = int(kwargs.get('width', 8))
-        self.height = int(kwargs.get('height', 8))
-        # board states stored as a dict,
-        # key: move as location on the board,
-        # value: player as pieces type
-        self.states = {}  # move -> player
-        # need how many pieces in a row to win
-        self.n_in_row = int(kwargs.get('n_in_row', 5))
-        self.players = [1, 2]  # player1 and player2
-
-    def init_board(self, start_player=0):
-        if self.width < self.n_in_row or self.height < self.n_in_row:
-            raise Exception('board width and height can not be '
-                            'less than {}'.format(self.n_in_row))
-        self.current_player = self.players[start_player]  # start player
-        # keep available moves in a list
-        self.availables = list(range(self.width * self.height))
-        self.states = {}
-        self.last_move = -1
-
-    def move_to_location(self, move):
-        """
-        3*3 board's moves like:
-        6 7 8
-        3 4 5
-        0 1 2
-        and move 5's location is (1,2)
-        """
-        h = move // self.width
-        w = move % self.width
-        return [h, w]
-
-    def location_to_move(self, location):
-        if len(location) != 2:
-            return -1
-        h = location[0]
-        w = location[1]
-        move = h * self.width + w
-        if move not in range(self.width * self.height):
-            return -1
-        return move
-
-    def current_state(self):
-        """return the board state from the perspective of the current player.
-        state shape: 4*width*height
-        """
-
-        square_state = np.zeros((4, self.width, self.height))
-        if self.states:
-            moves, players = np.array(list(zip(*self.states.items())))
-            move_curr = moves[players == self.current_player]
-            move_oppo = moves[players != self.current_player]
-            square_state[0][move_curr // self.width,
-                            move_curr % self.height] = 1.0
-            square_state[1][move_oppo // self.width,
-                            move_oppo % self.height] = 1.0
-            # indicate the last move location
-            square_state[2][self.last_move // self.width,
-                            self.last_move % self.height] = 1.0
-        if len(self.states) % 2 == 0:
-            square_state[3][:, :] = 1.0  # indicate the colour to play
-        return square_state[:, ::-1, :]
-
-    def do_move(self, move):
-        self.states[move] = self.current_player
-        self.availables.remove(move)
-        self.current_player = (
-            self.players[0] if self.current_player == self.players[1]
-            else self.players[1]
-        )
-        self.last_move = move
-
-    def has_a_winner(self):
-        width = self.width
-        height = self.height
-        states = self.states
-        n = self.n_in_row
-
-        moved = list(set(range(width * height)) - set(self.availables))
-        if len(moved) < self.n_in_row *2-1:
-            return False, -1
-
-        for m in moved:
-            h = m // width
-            w = m % width
-            player = states[m]
-
-            if (w in range(width - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n))) == 1):
-                return True, player
-
-            if (h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * width, width))) == 1):
-                return True, player
-
-            if (w in range(width - n + 1) and h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * (width + 1), width + 1))) == 1):
-                return True, player
-
-            if (w in range(n - 1, width) and h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * (width - 1), width - 1))) == 1):
-                return True, player
-
-        return False, -1
-
-    def game_end(self):
-        """Check whether the game is ended or not"""
-        win, winner = self.has_a_winner()
-        if win:
-            return True, winner
-        elif not len(self.availables):
-            return True, -1
-        return False, -1
-
-    def get_current_player(self):
-        return self.current_player
-
-
 class Game(object):
     """game server"""
 
     # def __init__(self, board, **kwargs):
     #     self.board = board
-    def __init__(self, board, window_size=600, grid_size=8,  **kwargs):
-        self.board = board
+    def __init__(self, width, height, is_verbose=False,  **kwargs):
 
-        if IS_VERBOSE:
-            print("Game:init: 初始化Game")
+        self.is_verbose = is_verbose
         # 扩展窗口：左侧棋盘(600) + 中间信息(200) + 右侧搜索树(800) = 1600 x 600
         self.screen = pygame.display.set_mode((1600, 600))  # 整合棋盘和搜索树
-        self.window_size = window_size  # 棋盘尺寸
-        self.grid_size = grid_size      # 单格尺寸
+        self.window_size = 600  # 棋盘尺寸
+        self.grid_size = 8      # 网格数量
         self.cell_size = self.window_size // self.grid_size  # 每个cell的size
         self.policy_value_fn = None  # 用于计算胜率的策略函数
-        self.win_rates = {'player1': 0.5, 'player2': 0.5}  # 初始胜率
-        # 重开按钮的位置和尺寸
+
+        # 初始化棋盘
+        self.board = Board(width=width,
+                           height=height,
+                           n_in_row=5)
+
+        # 初始化 AI选手 MCTS Player
+        self.mcts_player = MCTSPlayer(policy_value_function=None,
+                                      c_puct=5,
+                                      n_playout=1000,
+                                      is_selfplay=1)
+
+        # 初始化 胜率值
+        self.win_rates = {'player1': 0.5, 'player2': 0.5}
+
+        # 初始化 重开按钮
         self.restart_button_rect = pygame.Rect(620, 520, 160, 50)
 
         # MCTS 搜索树可视化区域（右侧）
@@ -395,32 +59,9 @@ class Game(object):
         # 前端搜索树坐标显示格式：'1d' (一维) 或 '2d' (二维，默认)
         self.position_format = '2d'
 
-        # MCTS Player (整合到 Game 中，不再使用回调)
-        self.mcts_player = None
 
-    def simpleGraphic(self, board, player1, player2):
-        """Draw the board and show game info"""
-        width = board.width
-        height = board.height
-
-        print("Player", player1, "with X".rjust(3))
-        print("Player", player2, "with O".rjust(3))
-        print()
-        for x in range(width):
-            print("{0:8}".format(x), end='')
-        print('\r\n')
-        for i in range(height - 1, -1, -1):
-            print("{0:4d}".format(i), end='')
-            for j in range(width):
-                loc = i * width + j
-                p = board.states.get(loc, -1)
-                if p == player1:
-                    print('X'.center(8), end='')
-                elif p == player2:
-                    print('O'.center(8), end='')
-                else:
-                    print('_'.center(8), end='')
-            print('\r\n\r\n')
+        if self.is_verbose:
+            print("Game:init: 初始化Game")
 
     # 走棋
     def machineStep(self, board):
@@ -429,7 +70,7 @@ class Game(object):
         # 先将所有棋子位置更新到 game_board
         for pos, playerNum in board.states.items():
             x, y = self.board.move_to_location(pos)  # h, w
-            game_board[y][7-x] = playerNum
+            game_board[y][self.board.width-1-x] = playerNum
 
         # 检查游戏是否结束
         end, winner = board.game_end()
@@ -481,7 +122,7 @@ class Game(object):
         last_move_pos = None
         if last_move != -1:
             h, w = self.board.move_to_location(last_move)
-            last_move_pos = (w, 7 - h)  # 转换为 game_board 坐标
+            last_move_pos = (w, self.board.width - h)  # 转换为 game_board 坐标
 
         # 绘制棋子
         font_coord = pygame.font.Font(None, 36)  # 棋子上的坐标字体（18*2=36）
@@ -500,12 +141,8 @@ class Game(object):
                                          (center_x, center_y), 6)
 
                     # 在黑子上显示坐标（白色文字）
-                    h, w = 7 - j, i  # 转换回棋盘坐标
-                    move = self.board.location_to_move([h, w])
-                    if self.position_format == '2d':
-                        coord_str = f"{h},{w}"
-                    else:
-                        coord_str = f"{move}"
+                    h, w = self.board.width - j, i  # 转换回棋盘坐标
+                    coord_str = f"{h},{w}"
                     coord_text = font_coord.render(coord_str, True, (255, 255, 255))
                     text_rect = coord_text.get_rect(center=(center_x, center_y))
                     self.screen.blit(coord_text, text_rect)
@@ -520,12 +157,8 @@ class Game(object):
                                          (center_x, center_y), 6)
 
                     # 在白子上显示坐标（黑色文字）
-                    h, w = 7 - j, i  # 转换回棋盘坐标
-                    move = self.board.location_to_move([h, w])
-                    if self.position_format == '2d':
-                        coord_str = f"{h},{w}"
-                    else:
-                        coord_str = f"{move}"
+                    h, w = self.board.width-1 - j, i  # 转换回棋盘坐标
+                    coord_str = f"{h},{w}"
                     coord_text = font_coord.render(coord_str, True, (0, 0, 0))
                     text_rect = coord_text.get_rect(center=(center_x, center_y))
                     self.screen.blit(coord_text, text_rect)
@@ -652,7 +285,7 @@ class Game(object):
 
         # 纵坐标（左侧，0-7，从上到下）
         for i in range(self.grid_size):
-            coord_text = font_coord.render(str(7 - i), True, (50, 50, 50))
+            coord_text = font_coord.render(str(self.board.width-1 - i), True, (50, 50, 50))
             coord_rect = coord_text.get_rect(center=(15, i * self.cell_size + self.cell_size // 2))
             self.screen.blit(coord_text, coord_rect)
 
@@ -669,7 +302,7 @@ class Game(object):
                 # 正常落子（只在棋盘区域）
                 if mouse_pos[0] < self.window_size:  # 确保点击在棋盘区域
                     x, y = mouse_pos[0] // self.cell_size, mouse_pos[1] // self.cell_size
-                    newx = 7 - y
+                    newx = self.board.width - y
                     newy = x
                     move = self.board.location_to_move([newx, newy])
                     print("human: ", move)
@@ -919,7 +552,7 @@ class Game(object):
 
                 # AI落子后添加延时（仅在有人类玩家时）
                 if human_player is not None and current_player != human_player:
-                    time.sleep(1.0)
+                    time.sleep(0.1)
 
             if is_shown:
                 self.machineStep(self.board)
@@ -940,7 +573,7 @@ class Game(object):
                     # 纯AI对战，直接返回胜者
                     return winner
 
-    def start_self_play(self, player, is_shown=0, temp=1e-3, visualize_playout=False, playout_delay=0.5):
+    def start_self_play(self, is_shown=0, temp=1e-3, visualize_playout=False, playout_delay=0.5):
         """ start a self-play game using a MCTS player, reuse the search tree,
         and store the self-play data: (state, mcts_probs, z) for training
 
@@ -950,11 +583,11 @@ class Game(object):
         """
         # 如果启用 playout 可视化，设置回调
         if visualize_playout and is_shown:
-            player.mcts._visualize_callback = lambda: self.machineStep(self.board)
-            player.mcts._visualize_delay = playout_delay
-            print(f"[可视化] 启用 playout 推演可视化，延迟={playout_delay}秒，预计每步耗时={player.mcts._n_playout * playout_delay}秒")
+            self.mcts_player.mcts._visualize_callback = lambda: self.machineStep(self.board)
+            self.mcts_player.mcts._visualize_delay = playout_delay
+            print(f"[可视化] 启用 playout 推演可视化，延迟={playout_delay}秒，预计每步耗时={self.mcts_player.mcts._n_playout * playout_delay}秒")
         else:
-            player.mcts._visualize_callback = None
+            self.mcts_player.mcts._visualize_callback = None
 
         # 完成一次完整的对弈，然后返回
         self.board.init_board()
@@ -962,7 +595,7 @@ class Game(object):
         states, mcts_probs, current_players = [], [], []
         while True:
             # t1: MCTS 搜索（内部会执行推演）  log
-            move, move_probs = player.get_action(self.board,
+            move, move_probs = self.mcts_player.get_action(self.board,
                                                  temp=temp,
                                                  return_prob=1)
 
@@ -979,11 +612,11 @@ class Game(object):
             #     self.machineStep(self.board)  # 刷新界面，显示落子前的棋盘和新搜索树
                 # time.sleep(5)
 
-            if IS_VERBOSE:
+            if self.is_verbose:
                 print(f"t3: 棋盘落子 move={move}")
             self.board.do_move(move)
             # 更新搜索树根节点（搜索树复用）
-            player.mcts.set_root(move)
+            self.mcts_player.mcts.set_root(move)
 
             # 新的推演起点
             if is_shown:
@@ -998,7 +631,7 @@ class Game(object):
                     winners_z[np.array(current_players) == winner] = 1.0
                     winners_z[np.array(current_players) != winner] = -1.0
                 # reset MCTS root node
-                player.reset_player()
+                self.mcts_player.reset_player()
                 if is_shown:
                     if winner != -1:
                         print("Game end. Winner is player:", winner)
