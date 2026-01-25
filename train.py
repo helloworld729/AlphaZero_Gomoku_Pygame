@@ -8,9 +8,8 @@ from collections import defaultdict, deque
 import numpy as np
 
 from env.game import Game
-from env.MCTSPlayer import MCTSPlayer
-from env.Board import Board
-from mcts_pure import MCTSPlayer as MCTS_Pure
+from player.MCTSPlayer import MCTSPlayer
+from player.mcts_pure import MCTSPlayer as MCTS_Pure
 # from policy_value_net import PolicyValueNet  # Theano and Lasagne
 from policy_value_net_pytorch import PolicyValueNet  # Pytorch
 
@@ -21,7 +20,7 @@ class TrainPipeline():
         print("TrainPipeline:init: 初始化: TrainPipeline")
         # params of the board and the game
         # training params
-        self.learn_rate = 5e-5  # 原始值=2e-3
+        self.learn_rate = 5e-5  # 原始值=2e-3->5e-5
         self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
         self.temp = 1.0  # the temperature param
         self.n_playout = 1000  # num of simulations for each move， 原始值=400 访问的广度
@@ -32,17 +31,15 @@ class TrainPipeline():
         self.play_batch_size = 1
         self.epochs = 5  # num of train_steps for each update
         self.kl_targ = 0.02
-        self.check_freq = 50  # 多少次进行一次 和纯MCTS的 对局评估
+        self.check_freq = 50  # 多少次进行一次 和纯MCTS的 对局评估， 原始值=50
         self.game_batch_num = 1500  # 训练多少次自我对弈
         self.best_win_ratio = 0.0
         self.is_shown_pygame = 1  # 是否展示/刷新 pygame界面
-        # num of simulations used for the pure mcts, which is used as
-        # the opponent to evaluate the trained policy
         self.pure_mcts_playout_num = 1000
 
         # Game相关
-        self.board_width = 8
-        self.board_height = 8
+        self.board_width = 10
+        self.board_height = 10
         self.game = Game(width=self.board_width, height=self.board_height, is_verbose=IS_VERBOSE)
 
         if init_model:
@@ -208,7 +205,7 @@ if __name__ == '__main__':
     # 推演可视化配置（可选，会显著降低训练速度）
     # 注:搜索树的展示有2个粒度，① 推演前后的展示，② 推演过程的展示，这里配置的是后者
     training_pipeline.visualize_playout = False
-    training_pipeline.playout_delay = 0.01
+    training_pipeline.playout_delay = 2
 
     training_pipeline.run()
 
