@@ -32,7 +32,7 @@ class TrainPipeline():
         self.epochs = 5  # num of train_steps for each update
         self.kl_targ = 0.02
         self.check_freq = 50  # 多少次进行一次 和纯MCTS的 对局评估， 原始值=50
-        self.game_batch_num = 1500  # 训练多少次自我对弈
+        self.game_batch_num = 2000  # 训练多少次自我对弈  1500
         self.best_win_ratio = 0.0
         self.is_shown_pygame = 1  # 是否展示/刷新 pygame界面
         self.pure_mcts_playout_num = 1000
@@ -167,6 +167,9 @@ class TrainPipeline():
     def run(self):
         """run the training pipeline"""
         try:
+            # 启动训练计时器
+            self.game.start_training_timer()
+
             for i in range(self.game_batch_num):
                 print("TrainPipeline:run: 收集数据")
                 # 从 __main__ 中获取配置（如果有的话）
@@ -209,4 +212,6 @@ if __name__ == '__main__':
 
     training_pipeline.run()
 
-    # V1-封板
+    # 输出训练时间
+    print("训练时间: {}s".format(training_pipeline.game.get_training_time_str()))
+

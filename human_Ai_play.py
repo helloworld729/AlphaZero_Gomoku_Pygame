@@ -50,6 +50,9 @@ def run():
         # 将策略函数传递给游戏对象用于胜率评估
         game.policy_value_fn = best_policy.policy_value_fn
 
+        # 启动训练计时器（用于显示模型训练时长）
+        game.start_training_timer()
+
         # load the provided model (trained in Theano/Lasagne) into a MCTS player written in pure numpy
         # try:
         #     policy_param = pickle.load(open(model_file, 'rb'))

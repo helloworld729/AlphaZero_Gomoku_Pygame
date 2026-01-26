@@ -2,17 +2,13 @@
 
 from __future__ import print_function
 
-import random
 import time
-from collections import deque
 
 import numpy as np
-
 
 from env.board import Board
 from env.pygameDisplay import PygameDisplay
 from player.MCTSPlayer import MCTSPlayer
-
 
 # 全局配置：是否打印详细日志（默认关闭以提升性能）
 IS_VERBOSE = False  # 设为 True 启用详细的 print 输出
@@ -40,9 +36,31 @@ class Game(object):
 
         self.pygameDisplay = PygameDisplay(width, height)
 
+        # 训练时长追踪
+        self.training_start_time = None  # 训练开始时间（时间戳）
+
         if self.is_verbose:
             print("Game:init: 初始化Game")
 
+    def start_training_timer(self):
+        """开始训练计时"""
+        self.training_start_time = time.time()
+
+    def get_training_time_str(self):
+        """获取格式化的训练时长字符串 (例: '1 h 23 m 45 s')"""
+        if self.training_start_time is None:
+            return "N/A"
+
+        elapsed_seconds = int(time.time() - self.training_start_time)
+        hours = elapsed_seconds // 3600
+        minutes = (elapsed_seconds % 3600) // 60
+        seconds = elapsed_seconds % 60
+
+        return f"{hours} h {minutes} m {seconds} s"
+
+    def update_training_time_display(self):
+        """更新显示的训练时长"""
+        self.pygameDisplay.training_time = self.get_training_time_str()
 
     def start_play(self, player1, player2, start_player=0, is_shown=1, human_player=None):
         """
@@ -89,6 +107,7 @@ class Game(object):
 
             if is_shown:
                 # 人机对战 / alpha 和 pure对战的时候，推演完毕后会充值搜索树，此时pygame不会渲染MCTS
+                self.update_training_time_display()  # 更新训练时长
                 self.pygameDisplay.update_screen(self.board, self.mcts_player.mcts)
 
             end, winner = self.board.game_end()
@@ -154,6 +173,7 @@ class Game(object):
 
             # 新的推演起点
             if is_shown:
+                self.update_training_time_display()  # 更新训练时长
                 self.pygameDisplay.update_screen(self.board, self.mcts_player.mcts)  # 刷新界面，显示落子前的棋盘和新搜索树
                 # time.sleep(5)
 

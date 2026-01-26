@@ -2,8 +2,10 @@ import random
 from collections import deque
 
 import pygame
-from player.MCTSPlayer import MCTS
+
 from env.board import Board
+from player.MCTSPlayer import MCTS
+
 # 初始化
 pygame.init()
 pygame.display.set_caption('五子棋')
@@ -28,6 +30,9 @@ class PygameDisplay(object):
 
         # 前端搜索树坐标显示格式：'1d' (一维) 或 '2d' (二维，默认)
         self.position_format = '2d'
+
+        # 训练时长信息
+        self.training_time = "N/A"  # 格式: "X h Y m Z s" 或 "N/A"
 
     # 更新屏幕
     def update_screen(self, board, mcts):
@@ -84,6 +89,9 @@ class PygameDisplay(object):
                     coord_text = font_coord.render(coord_str, True, (0, 0, 0))
                     text_rect = coord_text.get_rect(center=(center_x, center_y))
                     self.screen.blit(coord_text, text_rect)
+
+        # 绘制游戏信息
+        self.draw_game_info(board)
 
         # 绘制 MCTS 搜索树（右侧）
         self.draw_mcts_tree(board, mcts)
@@ -142,9 +150,6 @@ class PygameDisplay(object):
             self.screen.blit(no_data_text, (self.tree_area_x + 300, 300))
             return
 
-        # 绘制游戏信息
-        self.draw_game_info(board)
-
         # 绘制树结构
         self._draw_tree_in_area(board, node_levels, font_small, font_normal)
 
@@ -179,6 +184,13 @@ class PygameDisplay(object):
 
         # 分隔线
         pygame.draw.line(self.screen, (150, 150, 150), (info_x, 140), (info_x + 160, 140), 2)
+
+        # 显示训练时长
+        training_label = font_small.render("Training Time:", True, (100, 100, 100))
+        self.screen.blit(training_label, (info_x, 150))
+
+        training_time_text = font_normal.render(self.training_time, True, (50, 150, 50))  # 绿色
+        self.screen.blit(training_time_text, (info_x, 170))
 
         # 绘制"重开一局"按钮（右下角）
         pygame.draw.rect(self.screen, (34, 139, 34), self.restart_button_rect, border_radius=8)  # 绿色
