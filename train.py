@@ -10,8 +10,7 @@ import numpy as np
 from env.game import Game
 from player.MCTSPlayer import MCTSPlayer
 from player.mcts_pure import MCTSPlayer as MCTS_Pure
-# from policy_value_net import PolicyValueNet  # Theano and Lasagne
-from policy_value_net_pytorch import PolicyValueNet  # Pytorch
+from model.policy_value_net_pytorch import PolicyValueNet
 
 IS_VERBOSE = False
 
@@ -20,6 +19,8 @@ class TrainPipeline():
         print("TrainPipeline:init: 初始化: TrainPipeline")
         # params of the board and the game
         # training params
+        self.board_width = 10
+        self.board_height = 10
         self.learn_rate = 5e-5  # 原始值=2e-3->5e-5
         self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
         self.temp = 1.0  # the temperature param
@@ -37,11 +38,6 @@ class TrainPipeline():
         self.is_shown_pygame = 1  # 是否展示/刷新 pygame界面
         self.pure_mcts_playout_num = 1000
 
-        # Game相关
-        self.board_width = 10
-        self.board_height = 10
-        self.game = Game(width=self.board_width, height=self.board_height, is_verbose=IS_VERBOSE)
-
         if init_model:
             # 基于checkPoint继续训练
             self.policy_value_net = PolicyValueNet(self.board_width,
@@ -51,10 +47,12 @@ class TrainPipeline():
             # start training from a new policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
                                                    self.board_height)
+        # Game相关
+        self.game = Game(width=self.board_width, height=self.board_height, is_verbose=IS_VERBOSE)
         self.game.mcts_player.mcts.set_policy(self.policy_value_net.policy_value_fn)
 
     # 数据扩充
-    def get_equi_data(self, play_data):
+    def get_aug_data(self, play_data):
         """augment the data set by rotation and flipping
         play_data: [(state, mcts_prob, winner_z), ..., ...]
         """
@@ -94,7 +92,7 @@ class TrainPipeline():
             play_data = list(play_data)[:]
             self.episode_len = len(play_data)
             # augment the data
-            play_data = self.get_equi_data(play_data)
+            play_data = self.get_aug_data(play_data)
             print("TrainPipeline: collect_selfplay_data：数据入栈")
             self.data_buffer.extend(play_data)
 
@@ -153,10 +151,14 @@ class TrainPipeline():
                                      n_playout=self.pure_mcts_playout_num)
         win_cnt = defaultdict(int)
         for i in range(n_games):
-            winner = self.game.start_play(current_mcts_player,
-                                          pure_mcts_player,
-                                          start_player=i % 2,
-                                          is_shown=1)
+            if random.random() < 0.5:
+                winner = self.game.start_play(current_mcts_player,
+                                              pure_mcts_player,
+                                              is_shown=1)
+            else:
+                winner = self.game.start_play(pure_mcts_player,
+                                              current_mcts_player,
+                                              is_shown=1)
             win_cnt[winner] += 1
         win_ratio = 1.0*(win_cnt[1] + 0.5*win_cnt[-1]) / n_games
         print("num_playouts:{}, win: {}, lose: {}, tie:{}".format(

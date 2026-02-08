@@ -362,6 +362,6 @@ class PygameDisplay(object):
                 # 正常落子（只在棋盘区域）
                 if mouse_pos[0] < self.window_size:  # 确保点击在棋盘区域
                     x, y = mouse_pos[0] // self.cell_size, mouse_pos[1] // self.cell_size
-                    move = board.location_to_move([width - y, x])
+                    move = board.location_to_move([width - 1 - y, x])
                     print("human: ", move)
         return move

@@ -14,22 +14,22 @@ def set_learning_rate(optimizer, lr):
         param_group['lr'] = lr
 
 
-class Net(nn.Module):
+class DualHeadNet(nn.Module):
     """policy-value network module"""
     def __init__(self, board_width, board_height):
-        super(Net, self).__init__()
+        super(DualHeadNet, self).__init__()
 
         self.board_width = board_width
         self.board_height = board_height
-        # common layers
+        # common layers(共享层)
         self.conv1 = nn.Conv2d(4, 32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        # action policy layers
+        # action policy layers(策略层)
         self.act_conv1 = nn.Conv2d(128, 4, kernel_size=1)
         self.act_fc1 = nn.Linear(4*board_width*board_height,
                                  board_width*board_height)
-        # state value layers
+        # state value layers(价值层)
         self.val_conv1 = nn.Conv2d(128, 2, kernel_size=1)
         self.val_fc1 = nn.Linear(2*board_width*board_height, 64)
         self.val_fc2 = nn.Linear(64, 1)
@@ -61,9 +61,9 @@ class PolicyValueNet():
         self.l2_const = 1e-4  # coef of l2 penalty
         # the policy value net module
         if self.use_gpu:
-            self.policy_value_net = Net(board_width, board_height).cuda()
+            self.policy_value_net = DualHeadNet(board_width, board_height).cuda()
         else:
-            self.policy_value_net = Net(board_width, board_height)
+            self.policy_value_net = DualHeadNet(board_width, board_height)
         self.optimizer = optim.Adam(self.policy_value_net.parameters(),
                                     weight_decay=self.l2_const)
 
@@ -72,7 +72,7 @@ class PolicyValueNet():
             self.policy_value_net.load_state_dict(net_params)
 
     def policy_value(self, state_batch):
-        """
+        """已经有了数据，用于计算KL散度(old->train->new->kl loss)
         input: a batch of states
         output: a batch of action probabilities and state values
         """
@@ -88,7 +88,7 @@ class PolicyValueNet():
             return act_probs, value.data.numpy()
 
     def policy_value_fn(self, board):
-        """
+        """搜索树定制化输出,返回前会过滤无效位置
         input: board
         output: a list of (action, probability) tuples for each available
         action and the score of the board state
@@ -96,17 +96,10 @@ class PolicyValueNet():
         legal_positions = board.availables
         current_state = np.ascontiguousarray(board.current_state().reshape(
                 -1, 4, self.board_width, self.board_height))
-        if self.use_gpu:
-            log_act_probs, value = self.policy_value_net(
-                    Variable(torch.from_numpy(current_state)).cuda().float())
-            act_probs = np.exp(log_act_probs.data.cpu().numpy().flatten())
-            value = value.data.cpu().numpy()[0][0]
-        else:
-            log_act_probs, value = self.policy_value_net(
-                    Variable(torch.from_numpy(current_state)).float())
-            act_probs = np.exp(log_act_probs.data.numpy().flatten())
-            value = value.data.numpy()[0][0]
+        act_probs, value = self.policy_value(current_state)
+        act_probs = act_probs.flatten()
         act_probs = zip(legal_positions, act_probs[legal_positions])
+        value = value[0][0]
         return act_probs, value
 
     def train_step(self, state_batch, mcts_probs, winner_batch, lr):
@@ -128,6 +121,7 @@ class PolicyValueNet():
 
         # forward
         log_act_probs, value = self.policy_value_net(state_batch)
+        # 均方误差 + 交叉熵(两个分布一致时,交叉熵最小) + L2正则
         # define the loss = (z - v)^2 - pi^T * log(p) + c||theta||^2
         # Note: the L2 penalty is incorporated in optimizer
         value_loss = F.mse_loss(value.view(-1), winner_batch)
@@ -141,8 +135,6 @@ class PolicyValueNet():
                 torch.sum(torch.exp(log_act_probs) * log_act_probs, 1)
                 )
         return loss.item(), entropy.item()
-        #for pytorch version >= 0.5 please use the following line instead.
-        #return loss.item(), entropy.item()
 
     def get_policy_param(self):
         net_params = self.policy_value_net.state_dict()

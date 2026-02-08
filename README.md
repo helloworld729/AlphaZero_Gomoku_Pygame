@@ -51,7 +51,7 @@ pip install pygame torch numpy
 
 #### 人机对战
 ```bash
-python human_Ai_play.py
+python infer_human_Ai_play.py
 ```
 
 #### 开始训练
@@ -63,7 +63,7 @@ python train.py
 
 ### 可视化配置
 ```python
-# human_Ai_play.py 中的配置
+# infer_human_Ai_play.py 中的配置
 VISUALIZE_PLAYOUT = True   # 启用 playout 可视化
 PLAYOUT_DELAY = 0.5        # 每次推演延迟时间
 IS_VERBOSE = False         # 详细日志输出控制
@@ -169,7 +169,7 @@ AlphaZero_Gomoku_Pygame/
 - 🎯 **[NEGAMAX_VISUAL.md](./NEGAMAX_VISUAL.md)** - Negamax 可视化对比（推荐先读这个！）
 
 ### 其他资源
-- 📝 [note.txt](./note.txt) - 开发笔记
+- 📝 [note.txt](./笔记.txt) - 开发笔记
 - 📚 [DOCUMENTATION_SUMMARY.md](./DOCUMENTATION_SUMMARY.md) - 文档体系总结和阅读指南
 
 **⚡ 快速入门**：先看 [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) 获得快速答案！

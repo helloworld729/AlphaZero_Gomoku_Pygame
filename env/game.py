@@ -19,7 +19,6 @@ class Game(object):
     def __init__(self, width, height, is_verbose=False,  **kwargs):
 
         self.is_verbose = is_verbose
-        self.policy_value_fn = None  # 用于计算胜率的策略函数
 
         # 初始化棋盘
         self.width = width
@@ -62,47 +61,34 @@ class Game(object):
         """更新显示的训练时长"""
         self.pygameDisplay.training_time = self.get_training_time_str()
 
-    def start_play(self, player1, player2, start_player=0, is_shown=1, human_player=None):
-        """
-        start a game between two players
-        human_player: None (纯AI对战), 1 (player1是人类), 或 2 (player2是人类)
-        visualize_playout: 是否启用每次 playout 的可视化（会显著降低速度）
-        playout_delay: 每次 playout 可视化后的延迟时间（秒）
-        """
-        if start_player not in (0, 1):
-            raise Exception('start_player should be either 0 (player1 first) '
-                            'or 1 (player2 first)')
-        self.board.init_board(start_player)
-        p1, p2 = self.board.players
-        player1.set_player_ind(p1)  # 1
-        player2.set_player_ind(p2)  # 2
+    def start_play(self, player1, player2, is_shown=1):
+        self.board.init_board()
+        p1, p2 = self.board.players  # [1, 2]
+        player1.set_player_ind(p1)   # 设置索引编号
+        player2.set_player_ind(p2)
         players = {p1: player1, p2: player2}
 
         while True:
             current_player = self.board.get_current_player()
             player_in_turn = players[current_player]
 
-            # 判断是否需要人类交互
-            if human_player is not None and current_player == human_player:
-                move = self.pygameDisplay.get_human_action(self.board.width, self.board.height)
+            if "human" in player_in_turn.__str__():
+                move = self.pygameDisplay.get_human_action(self.board, self.board.width, self.board.height)
 
                 # 检查是否点击了重开按钮
                 if move == -2:
                     print("重新开始游戏...")
-                    self.board.init_board(start_player)
+                    self.board.init_board()
                     self.pygameDisplay.update_screen(self.board, self.mcts_player.mcts)
                     continue
             else:
                 # AI对战
                 move = player_in_turn.get_action(self.board)
-                # if is_shown:
-                #     print(f"玩家{current_player}落子: ", move)
-
             if move != -1:
                 self.board.do_move(move)  # l轮换
 
                 # AI落子后添加延时（仅在有人类玩家时）
-                if human_player is not None and current_player != human_player:
+                if "human" not in player_in_turn.__str__():
                     time.sleep(0.1)
 
             if is_shown:
@@ -119,7 +105,7 @@ class Game(object):
                         print("Game end. Tie")
 
                 # 如果有人类玩家，游戏结束后继续等待重开；否则直接返回
-                if human_player is not None:
+                if "human" not in player1.__str__() or "human" not in player2.__str__():
                     # 游戏结束后继续等待，用户可以点击重开按钮
                     continue
                 else:
