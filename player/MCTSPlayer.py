@@ -9,12 +9,6 @@ from collections import deque
 
 import numpy as np
 
-#############################
-#        TreeNode           #
-#        Mcts               #
-#        MctsPlayer         #
-#############################
-
 
 def softmax(x):
     probs = np.exp(x - np.max(x))
@@ -212,7 +206,12 @@ class MCTSPlayer(object):
 
             # 选择最优动作
             if self._is_selfplay:
-                move = acts[np.argmax(probs)]
+                # move = acts[np.argmax(probs)]
+                # 鼓励变招
+                move = np.random.choice(
+                    acts,
+                    p=0.75*probs + 0.25*np.random.dirichlet(0.3*np.ones(len(probs)))
+                )
                 if self.is_verbose:
                     print("MCTSPlayer:get_action: 最终狄拉克采样动作={}".format(move))
                 # 注意：不在这里调用 set_root，而是在外部（game层）调用
